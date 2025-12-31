@@ -4,6 +4,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
+/**
+ * In-memory MemTable for LSM store.
+ * Supports basic put/get/delete/contains etc MAP operations.
+ */
 public class MemTable {
     private final TreeMap<String, ValueRecord> mem;
     private static final int SIZE = 4;

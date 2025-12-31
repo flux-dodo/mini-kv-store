@@ -31,10 +31,10 @@ A minimal, educational implementation of an **LSM-tree–based key–value store
 From the project root:
 
 ```bash
-rm -rf data/*
+rm -rf data/lsm*
 mkdir -p data/lsm/sst
 javac -d out $(find src -name "*.java")
-java -cp out store.Main
+java -cp out -Dengine=lsm store.Main
 ```
 
 Expected Output
@@ -72,7 +72,7 @@ Output: Empty response
 #### Restart & Recovery Demo
 
 ```bash
-java -cp out store.Main
+java -cp out -Dengine=lsm store.Main
 ```
 
 Example logs
@@ -148,3 +148,128 @@ This shows:
 - Write amplification
 - Manifest update
 - Deletion of old SST files
+
+
+## B-Tree Based
+
+A minimal disk-backed B-Tree key–value store implemented from scratch to contrast with the LSM approach.
+
+Unlike the LSM engine, the B-Tree:
+- performs in-place page updates
+- optimizes read latency
+- relies on a page-image Write-Ahead Log (WAL) for crash safety
+
+### Features
+- Fixed-size pages stored in a single data file (btree.data)
+- Leaf & internal pages with binary search
+- Page splits (leaf + internal)
+- Root split handling
+- Page-image WAL (redo-only) for crash recovery
+- Atomic updates using: WAL → fsync → page write → fsync → meta persist
+- On-startup WAL replay into page file
+- Metadata persisted separately (meta.txt)
+- Same KV interface as LSM engine
+
+### How to Compile and Run
+
+From the project root:
+
+```bash
+rm -rf data/btree*
+mkdir -p data/btree
+javac -d out $(find src -name "*.java")
+java -cp out -Dengine=btree store.Main
+```
+
+Expected Output
+
+```bash
+Initialized new B-Tree with root page 0
+KV server started on port 8080
+Use:
+  PUT    /store?key=k   (body = value bytes)
+  GET    /store?key=k
+  DELETE /store?key=k
+```
+
+#### Basic Usage Example
+Open another terminal and run:
+
+```bash
+curl -X PUT "http://localhost:8080/store?key=a" --data-binary "v1"
+curl -X PUT "http://localhost:8080/store?key=a" --data-binary "v2"
+curl "http://localhost:8080/store?key=a"
+```
+
+Output: Newest value
+```bash
+v2
+```
+
+#### Leaf Page Split Demo
+With MAX_KEYS_PER_PAGE = 3, inserting 4 keys forces a leaf split.
+
+```bash
+curl -X PUT "http://localhost:8080/store?key=k1" --data-binary "v1"
+curl -X PUT "http://localhost:8080/store?key=k2" --data-binary "v2"
+curl -X PUT "http://localhost:8080/store?key=k3" --data-binary "v3"
+curl -X PUT "http://localhost:8080/store?key=k4" --data-binary "v4"
+```
+
+Example logs
+```bash
+Leaf split: promote key='k2' to parent
+Root split: new root pageId=2
+```
+
+This shows:
+- Leaf page overflow
+- Split into left + right leaf
+- Key promotion
+- New root creation
+
+#### Internal Page Split Demo
+
+```bash
+for i in {5..20}; do
+  curl -s -X PUT "http://localhost:8080/store?key=k$i" --data-binary "v$i" >/dev/null
+done
+```
+
+Example logs
+```bash
+Internal split: promote key='k3' to parent
+```
+
+This demonstrates:
+- Propagation of splits upward
+- Structural rebalancing
+- Tree height growth
+
+#### Restart & Recovery Demo
+To test crash recovery run with wal persist flag as true.
+
+```bash
+java -cp out -Dengine=btree -Dwal.persist=true store.Main
+```
+
+In another terminal, send request to send data
+```bash
+for i in {5..20}; do
+  curl -s -X PUT "http://localhost:8080/store?key=k$i" --data-binary "v$i" >/dev/null
+done
+```
+
+Stop and restart server
+
+Example logs
+```bash
+ja -cp out -Dengine=btree store.Main
+WAL replay applied 79 pages
+KV server started on port 8080
+```
+
+This shows:
+- WAL replay
+- Pages were restored correctly
+- No torn or partial writes

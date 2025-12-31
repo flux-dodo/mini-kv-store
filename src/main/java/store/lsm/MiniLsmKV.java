@@ -5,11 +5,15 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import store.KV;
 import store.lsm.MemTable.ValueRecord;
 
 import static java.nio.file.StandardCopyOption.*;
 
-public final class MiniLsmKV {
+/**
+ * A minimal LSM key-value store implementation.
+ */
+public final class MiniLsmKV implements KV{
   private final Wal wal;
   private final MemTable mem;
   private final Manifest manifest;
@@ -42,6 +46,10 @@ public final class MiniLsmKV {
     maybeCompact();
   }
 
+  /**
+   * Puts a key-value pair into the store.
+   */
+  @Override
   public synchronized void put(String key, byte[] value) throws IOException {
     wal.appendPut(key, value);
     mem.put(key, value);
@@ -56,6 +64,10 @@ public final class MiniLsmKV {
     }
   }
 
+  /**
+   * Deletes a key from the store.
+   */
+  @Override
   public synchronized void delete(String key) throws IOException {
     wal.appendDelete(key);
     mem.delete(key);
@@ -70,6 +82,10 @@ public final class MiniLsmKV {
     }
   }
 
+  /**
+   * Gets the value for a key from the store.
+   */
+  @Override
   public synchronized byte[] get(String key) throws IOException {
     var inMem = mem.get(key);
     if (inMem != null) {
@@ -103,6 +119,10 @@ public final class MiniLsmKV {
     return null;
   }
 
+  /**
+   * Flushes the in-memory table to a new SSTable on disk.
+   * @throws IOException
+   */
   private void flushMemTable() throws IOException {
     if (mem.isEmpty()) {
       log("FLUSH_SKIP", "MemTable is empty");
@@ -136,28 +156,38 @@ public final class MiniLsmKV {
     log("FLUSH_DONE", "clearedMemTable resetWAL");
   }
 
-    private synchronized void maybeCompact() throws IOException {
-        int count = manifest.sstableCount();
-        if (count < compactTrigger) {
-            log("COMPACT_SKIP", "sstCount=%d trigger=%d", count, compactTrigger);
-            return;
-        }
-        if (compactionRunning) {
-            log("COMPACT_SKIP", "already running");
-            return;
-        }
+  /**
+   * Maybe triggers a compaction if the number of SSTables exceeds the threshold.
+   * @throws IOException
+   */
+  private synchronized void maybeCompact() throws IOException {
+      int count = manifest.sstableCount();
+      if (count < compactTrigger) {
+          log("COMPACT_SKIP", "sstCount=%d trigger=%d", count, compactTrigger);
+          return;
+      }
+      if (compactionRunning) {
+          log("COMPACT_SKIP", "already running");
+          return;
+      }
 
-        compactionRunning = true;
-        try {
-            log("COMPACT_TRIGGER", "sstCount=%d trigger=%d", count, compactTrigger);
-            Compactor.compactAll(dataDir, manifest);
-        } finally {
-            compactionRunning = false;
-        }
-    }
+      compactionRunning = true;
+      try {
+          log("COMPACT_TRIGGER", "sstCount=%d trigger=%d", count, compactTrigger);
+          Compactor.compactAll(dataDir, manifest);
+      } finally {
+          compactionRunning = false;
+      }
+  }
 
-    private static void log(String tag, String fmt, Object... args) {
-        System.out.print("[" + tag + "] ");
-        System.out.printf(fmt + "%n", args);
-    }
+  /**
+   * Logs a formatted message with a tag.
+   * @param tag The tag to categorize the log message.
+   * @param fmt The format string.
+   * @param args Arguments referenced by the format specifiers in the format string.
+   */
+  private static void log(String tag, String fmt, Object... args) {
+      System.out.print("[" + tag + "] ");
+      System.out.printf(fmt + "%n", args);
+  }
 }

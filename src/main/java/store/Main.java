@@ -3,27 +3,49 @@ package store;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-import store.lsm.MiniLsmKV;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * A simple HTTP server exposing a key-value store.
+ * 
+ * Usage:
+ *   java -Dengine=lsm  -cp mini-kv-store.jar store.Main
+ *   java -Dengine=btree -cp mini-kv-store.jar store.Main
+ * 
+ * The server listens on port 8080 and supports the following endpoints:
+ * 
+ *   PUT    /store?key=k   (body = value bytes)
+ *   GET    /store?key=k
+ *   DELETE /store?key=k
+ */
 public class Main {
 
     public static void main(String[] args) throws IOException {
         int port = 8080;
+        String engine = System.getProperty("engine", "lsm");
+        Path baseDir = Paths.get("data").resolve(engine);
 
-        // Initialize KV store (adjust constructor to your actual signature)
-        MiniLsmKV kv = new MiniLsmKV(
-                Path.of("data/lsm"),   // data dir
-                256L,        // memtable flush threshold bytes, change to see sstable creation quickly or slowly 
-                4                 // compact trigger, change to see compaction happen more or less often
-        );
+        KV kv;
+
+        if (engine.equals("lsm")) {
+            kv = new store.lsm.MiniLsmKV(
+                baseDir,               // data dir
+                256,    // memtable flush threshold bytes, change to see sstable creation quickly or slowly 
+                4);    // compact trigger, change to see compaction happen more or less often
+        } else if (engine.equals("btree")) {
+            kv = new store.btree.MiniBTreeKV(
+                baseDir /* plus knobs */);
+        } else {
+            throw new IllegalArgumentException("Unknown engine=" + engine);
+        }
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/store", new ApiHandler(kv));
@@ -37,9 +59,9 @@ public class Main {
     }
 
     private static final class ApiHandler implements HttpHandler {
-        private final MiniLsmKV kv;
+        private final KV kv;
 
-        public ApiHandler(MiniLsmKV kv) {
+        public ApiHandler(KV kv) {
             this.kv = kv;
         }
 

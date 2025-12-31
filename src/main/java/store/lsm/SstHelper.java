@@ -12,6 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
 
+/**
+ * Helper class for SSTable operations in LSM store.
+ */
 public final class SstHelper {
 
     // Footer layout: [indexOffset: int64][indexCount: int32][magic: int32]

@@ -11,6 +11,9 @@ import java.util.NavigableMap;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
+/**
+ * Compactor for LSM storage engine.
+ */
 public final class Compactor {
 
     private Compactor() {}
